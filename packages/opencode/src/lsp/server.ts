@@ -843,7 +843,7 @@ export namespace LSPServer {
     root: async (root) => {
       const crateRoot = await NearestRoot(["Cargo.toml", "Cargo.lock"])(root)
       if (crateRoot === undefined) {
-        return undefined
+        return Instance.directory
       }
       let currentDir = crateRoot
 
@@ -871,11 +871,81 @@ export namespace LSPServer {
     },
     extensions: [".rs"],
     async spawn(root) {
-      const bin = Bun.which("rust-analyzer")
+      let bin = Bun.which("rust-analyzer", {
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
+      })
+
       if (!bin) {
-        log.info("rust-analyzer not found in path, please install it")
-        return
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("downloading rust-analyzer from GitHub releases")
+
+        const releaseResponse = await fetch("https://api.github.com/repos/rust-lang/rust-analyzer/releases/latest")
+        if (!releaseResponse.ok) {
+          log.error("Failed to fetch rust-analyzer release info")
+          return
+        }
+
+        const release = (await releaseResponse.json()) as {
+          tag_name?: string
+          assets?: { name?: string; browser_download_url?: string }[]
+        }
+
+        const platform = process.platform
+        const arch = process.arch
+
+        let assetName = ""
+        if (platform === "darwin") {
+          assetName =
+            arch === "arm64" ? "rust-analyzer-aarch64-apple-darwin.gz" : "rust-analyzer-x86_64-apple-darwin.gz"
+        } else if (platform === "linux") {
+          assetName =
+            arch === "arm64"
+              ? "rust-analyzer-aarch64-unknown-linux-gnu.gz"
+              : "rust-analyzer-x86_64-unknown-linux-gnu.gz"
+        } else if (platform === "win32") {
+          assetName =
+            arch === "arm64" ? "rust-analyzer-aarch64-pc-windows-msvc.gz" : "rust-analyzer-x86_64-pc-windows-msvc.gz"
+        }
+
+        if (!assetName) {
+          log.error(`Platform ${platform} and architecture ${arch} is not supported by rust-analyzer`)
+          return
+        }
+
+        const assets = release.assets ?? []
+        const asset = assets.find((a) => a.name === assetName)
+        if (!asset?.browser_download_url) {
+          log.error(`Could not find asset ${assetName} in rust-analyzer release`)
+          return
+        }
+
+        const downloadResponse = await fetch(asset.browser_download_url)
+        if (!downloadResponse.ok) {
+          log.error("Failed to download rust-analyzer")
+          return
+        }
+
+        const gzPath = path.join(Global.Path.bin, assetName)
+        await Bun.file(gzPath).write(downloadResponse)
+
+        const ext = platform === "win32" ? ".exe" : ""
+        bin = path.join(Global.Path.bin, "rust-analyzer" + ext)
+
+        await $`gunzip -c ${gzPath} > ${bin}`.nothrow()
+        await fs.rm(gzPath, { force: true })
+
+        if (!(await Bun.file(bin).exists())) {
+          log.error("Failed to extract rust-analyzer binary")
+          return
+        }
+
+        if (platform !== "win32") {
+          await $`chmod +x ${bin}`.nothrow()
+        }
+
+        log.info("installed rust-analyzer", { bin })
       }
+
       return {
         process: spawn(bin, {
           cwd: root,
