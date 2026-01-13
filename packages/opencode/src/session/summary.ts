@@ -125,16 +125,17 @@ export namespace SessionSummary {
           }
         }
         const summaryAgent = await Agent.get("summary")
+        const summaryModel = summaryAgent.model
+          ? await Provider.getModel(summaryAgent.model.providerID, summaryAgent.model.modelID)
+          : small
         const stream = await LLM.stream({
           agent: summaryAgent,
           user: userMsg,
           tools: {},
-          model: summaryAgent.model
-            ? await Provider.getModel(summaryAgent.model.providerID, summaryAgent.model.modelID)
-            : small,
+          model: summaryModel,
           small: true,
           messages: [
-            ...MessageV2.toModelMessage(messages),
+            ...MessageV2.toModelMessage(messages, { providerID: summaryModel.providerID, modelID: summaryModel.id }),
             {
               role: "user" as const,
               content: `Summarize the above conversation according to your system prompts.`,

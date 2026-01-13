@@ -355,6 +355,21 @@ export function Autocomplete(props: {
         description: "exit the app",
         onSelect: () => command.trigger("app.exit"),
       },
+      {
+        display: "/voice",
+        description: "toggle voice mode",
+        onSelect: () => command.trigger("voice.toggle"),
+      },
+      {
+        display: "/speak",
+        description: "speak text or last response",
+        onSelect: () => command.trigger("voice.speak"),
+      },
+      {
+        display: "/voice-config",
+        description: "show voice configuration",
+        onSelect: () => command.trigger("voice.config"),
+      },
     )
     const max = firstBy(results, [(x) => x.display.length, "desc"])?.display.length
     if (!max) return results

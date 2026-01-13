@@ -592,6 +592,27 @@ export type EventTuiToastShow = {
   }
 }
 
+export type EventTuiVoiceRecord = {
+  type: "tui.voice.record"
+  properties: {
+    action: "start" | "stop"
+  }
+}
+
+export type EventTuiVoiceTranscript = {
+  type: "tui.voice.transcript"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiVoiceError = {
+  type: "tui.voice.error"
+  properties: {
+    message: string
+  }
+}
+
 export type EventMcpToolsChanged = {
   type: "mcp.tools.changed"
   properties: {
@@ -765,6 +786,9 @@ export type Event =
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
+  | EventTuiVoiceRecord
+  | EventTuiVoiceTranscript
+  | EventTuiVoiceError
   | EventMcpToolsChanged
   | EventCommandExecuted
   | EventSessionCreated
@@ -1149,6 +1173,48 @@ export type KeybindsConfig = {
    * Toggle tips on home screen
    */
   tips_toggle?: string
+  /**
+   * Toggle voice input mode
+   */
+  voice_toggle?: string
+  /**
+   * Push-to-talk while in voice mode
+   */
+  voice_record?: string
+}
+
+/**
+ * Voice input/output configuration
+ */
+export type VoiceConfig = {
+  /**
+   * Enable voice input/output
+   */
+  enabled?: boolean
+  /**
+   * Speech-to-text provider
+   */
+  sttProvider?: "openai" | "deepgram" | "local"
+  /**
+   * Text-to-speech provider
+   */
+  ttsProvider?: "openai" | "elevenlabs" | "system"
+  /**
+   * Voice to use for text-to-speech
+   */
+  ttsVoice?: string
+  /**
+   * Automatically speak responses
+   */
+  autoSpeak?: boolean
+  /**
+   * Optional wake word to trigger voice input
+   */
+  wakeWord?: string | null
+  /**
+   * Audio input device name
+   */
+  inputDevice?: string | null
 }
 
 export type AgentConfig = {
@@ -1600,6 +1666,10 @@ export type Config = {
      */
     continue_loop_on_deny?: boolean
   }
+  /**
+   * Voice input/output configuration
+   */
+  voice?: VoiceConfig
 }
 
 export type ToolIds = Array<string>

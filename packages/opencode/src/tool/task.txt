@@ -3,7 +3,7 @@ Launch a new agent to handle complex, multi-step tasks autonomously.
 Available agent types and the tools they have access to:
 {agents}
 
-When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
+When using the Task tool, you must specify a subagent_type parameter to select which agent type to use. You can optionally specify a model parameter to override the default model for the subagent (e.g. model="opencode/minimax-m2.1" or model="anthropic/claude-sonnet-4-20250514").
 
 When to use the Task tool:
 - When you are instructed to execute custom slash commands. Use the Task tool with the slash command invocation as the entire prompt. The slash command can take arguments. For example: Task(description="Check the file", prompt="/check-file path/to/file.py")
@@ -22,6 +22,7 @@ Usage notes:
 4. The agent's outputs should generally be trusted
 5. Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent
 6. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
+7. If the user requests a specific model for the subagent (e.g. "use minimax-m2.1 to do X" or "have claude-opus do Y"), pass the model parameter with the full model identifier (provider/model-id).
 
 Example usage (NOTE: The agents below are fictional examples for illustration only - use the actual agents listed above):
 

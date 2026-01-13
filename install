@@ -257,11 +257,11 @@ download_with_progress() {
     {
         local length=0
         local bytes=0
-        
+
         while IFS=" " read -r -a line; do
             [ "${#line[@]}" -lt 2 ] && continue
             local tag="${line[0]} ${line[1]}"
-            
+
             if [ "$tag" = "0000: content-length:" ]; then
                 length="${line[2]}"
                 length=$(echo "$length" | tr -d '\r')
@@ -286,7 +286,7 @@ download_and_install() {
     print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}version: ${NC}$specific_version"
     local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
     mkdir -p "$tmp_dir"
-    
+
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
         # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
         curl -# -L -o "$tmp_dir/$filename" "$url"
@@ -297,14 +297,24 @@ download_and_install() {
     else
         unzip -q "$tmp_dir/$filename" -d "$tmp_dir"
     fi
-    
+
     mv "$tmp_dir/opencode" "$INSTALL_DIR"
     chmod 755 "${INSTALL_DIR}/opencode"
     rm -rf "$tmp_dir"
 }
 
-check_version
-download_and_install
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOCAL_DIST_PATH="$SCRIPT_DIR/packages/opencode/dist/$APP-$target/bin/opencode"
+
+if [ -f "$LOCAL_DIST_PATH" ]; then
+    print_message info "Found local build at $LOCAL_DIST_PATH"
+    cp "$LOCAL_DIST_PATH" "$INSTALL_DIR/opencode"
+    chmod 755 "$INSTALL_DIR/opencode"
+    print_message info "Installed local build to $INSTALL_DIR/opencode"
+else
+    check_version
+    download_and_install
+fi
 
 
 add_to_path() {

@@ -567,6 +567,8 @@ export namespace Config {
       terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
       terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
       tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
+      voice_toggle: z.string().optional().default("v").describe("Toggle voice input mode"),
+      voice_record: z.string().optional().default("space").describe("Push-to-talk while in voice mode"),
     })
     .strict()
     .meta({
@@ -627,6 +629,34 @@ export namespace Config {
       ref: "ProviderConfig",
     })
   export type Provider = z.infer<typeof Provider>
+
+  export const Voice = z
+    .object({
+      enabled: z.boolean().optional().default(true).describe("Enable voice input/output"),
+      sttProvider: z
+        .enum(["google", "openai", "deepgram", "local"])
+        .optional()
+        .default("google")
+        .describe("Speech-to-text provider"),
+      ttsProvider: z
+        .enum(["google", "openai", "elevenlabs", "system"])
+        .optional()
+        .default("google")
+        .describe("Text-to-speech provider"),
+      ttsVoice: z
+        .string()
+        .optional()
+        .default("Kore")
+        .describe("Voice to use for TTS (Google: Zephyr, Puck, Charon, Kore, Fenrir, Aoede)"),
+      autoSpeak: z.boolean().optional().default(true).describe("Automatically speak responses"),
+      wakeWord: z.string().nullable().optional().default(null).describe("Optional wake word to trigger voice input"),
+      inputDevice: z.string().nullable().optional().default(null).describe("Audio input device name"),
+    })
+    .strict()
+    .meta({
+      ref: "VoiceConfig",
+    })
+  export type Voice = z.infer<typeof Voice>
 
   export const Info = z
     .object({
@@ -778,6 +808,7 @@ export namespace Config {
           url: z.string().optional().describe("Enterprise URL"),
         })
         .optional(),
+      voice: Voice.optional().describe("Voice input/output configuration"),
       experimental: z
         .object({
           hook: z

@@ -419,7 +419,10 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
-  export function toModelMessage(input: WithParts[]): ModelMessage[] {
+  export function toModelMessage(
+    input: WithParts[],
+    currentModel?: { providerID: string; modelID: string },
+  ): ModelMessage[] {
     const result: UIMessage[] = []
 
     for (const msg of input) {
@@ -529,10 +532,16 @@ export namespace MessageV2 {
               })
           }
           if (part.type === "reasoning") {
+            // Strip providerMetadata (which contains thinking signatures) when the model
+            // differs from the one that generated the reasoning - signatures are model-specific
+            // and cause "Invalid signature in thinking block" errors when switching models
+            const sameModel =
+              !currentModel ||
+              (currentModel.providerID === msg.info.providerID && currentModel.modelID === msg.info.modelID)
             assistantMessage.parts.push({
               type: "reasoning",
               text: part.text,
-              providerMetadata: part.metadata,
+              providerMetadata: sameModel ? part.metadata : undefined,
             })
           }
         }

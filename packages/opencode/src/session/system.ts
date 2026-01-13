@@ -2,7 +2,7 @@ import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
-import { Skill } from "../skill"
+import { Harness } from "./harness"
 
 import { Instance } from "../project/instance"
 import path from "path"
@@ -116,5 +116,9 @@ export namespace SystemPrompt {
         .then((x) => "Instructions from: " + p + "\n" + x),
     )
     return Promise.all(found).then((result) => result.filter(Boolean))
+  }
+
+  export async function harness() {
+    return Harness.instructions()
   }
 }

@@ -2,9 +2,8 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, on } from "solid-js"
 import { Installation } from "@/installation"
-import { Global } from "@/global"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
@@ -19,6 +18,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
+import { DialogVoiceConfig } from "@tui/component/dialog-voice-config"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -194,6 +194,21 @@ function App() {
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
+  const [voiceEnabled, setVoiceEnabled] = createSignal(kv.get("voice_enabled", false))
+
+  const getLastAssistantText = async (): Promise<string | undefined> => {
+    if (route.data.type !== "session") return undefined
+    const messages = sync.data.message[route.data.sessionID] ?? []
+    const lastAssistant = messages.findLast((m) => m.role === "assistant")
+    if (!lastAssistant) return undefined
+    const parts = sync.data.part[lastAssistant.id] ?? []
+    const textParts = parts.filter((p) => p.type === "text")
+    if (!textParts.length) return undefined
+    return textParts
+      .map((p) => p.text)
+      .join("\n")
+      .trim()
+  }
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
@@ -495,6 +510,119 @@ function App() {
           return next
         })
         dialog.clear()
+      },
+    },
+    {
+      title: voiceEnabled() ? "Disable voice mode" : "Enable voice mode",
+      value: "voice.toggle",
+      category: "Voice",
+      onSelect: (dialog) => {
+        setVoiceEnabled((prev) => {
+          const next = !prev
+          kv.set("voice_enabled", next)
+          toast.show({
+            message: next ? "Voice mode enabled" : "Voice mode disabled",
+            variant: "info",
+          })
+          return next
+        })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Speak text",
+      value: "voice.speak",
+      category: "Voice",
+      onSelect: async (dialog) => {
+        dialog.clear()
+        const voiceConfig = (sync.data.config as any).voice as { enabled?: boolean } | undefined
+        if (!voiceConfig?.enabled && !voiceEnabled()) {
+          toast.show({
+            message: "Voice mode is not enabled. Use /voice to enable.",
+            variant: "warning",
+          })
+          return
+        }
+        toast.show({
+          message: "Speaking last response...",
+          variant: "info",
+        })
+        try {
+          const { Voice } = await import("@/voice")
+          const lastMessage = await getLastAssistantText()
+          if (!lastMessage) {
+            toast.show({
+              message: "No assistant response to speak",
+              variant: "warning",
+            })
+            return
+          }
+          await Voice.speak(lastMessage)
+          toast.show({
+            message: "Speech completed",
+            variant: "success",
+          })
+        } catch (error) {
+          toast.show({
+            message: `Speech failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+            variant: "error",
+          })
+        }
+      },
+    },
+    {
+      title: "Voice configuration",
+      value: "voice.config",
+      category: "Voice",
+      onSelect: (dialog) => {
+        const voiceConfig = (sync.data.config as any).voice as
+          | {
+              enabled?: boolean
+              sttProvider?: string
+              ttsProvider?: string
+              ttsVoice?: string
+              autoSpeak?: boolean
+            }
+          | undefined
+        const enabled = voiceEnabled() || voiceConfig?.enabled
+        const sttProvider = voiceConfig?.sttProvider ?? "openai"
+        const ttsProvider = voiceConfig?.ttsProvider ?? "openai"
+        const ttsVoice = voiceConfig?.ttsVoice ?? "alloy"
+        const autoSpeak = voiceConfig?.autoSpeak ?? false
+
+        dialog.replace(() => (
+          <DialogVoiceConfig
+            enabled={enabled ?? false}
+            sttProvider={sttProvider}
+            ttsProvider={ttsProvider}
+            ttsVoice={ttsVoice}
+            autoSpeak={autoSpeak}
+          />
+        ))
+      },
+    },
+    {
+      title: "Voice input mode",
+      value: "voice.mode",
+      keybind: "voice_toggle",
+      category: "Voice",
+      disabled: !sync.data.config.voice?.enabled,
+      onSelect: (dialog) => {
+        dialog.clear()
+        const voiceConfig = sync.data.config.voice
+        if (!voiceConfig?.enabled) {
+          toast.show({
+            message: "Voice mode not enabled. Add 'voice.enabled = true' to config.",
+            variant: "warning",
+            duration: 3000,
+          })
+          return
+        }
+        toast.show({
+          message: "Press 'v' in the prompt to enter voice mode, then space to record",
+          variant: "info",
+          duration: 5000,
+        })
       },
     },
   ])

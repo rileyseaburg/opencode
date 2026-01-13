@@ -147,7 +147,7 @@ export namespace SessionCompaction {
       tools: {},
       system: [],
       messages: [
-        ...MessageV2.toModelMessage(input.messages),
+        ...MessageV2.toModelMessage(input.messages, { providerID: model.providerID, modelID: model.id }),
         {
           role: "user",
           content: [

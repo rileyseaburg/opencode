@@ -10,7 +10,7 @@ if (!expectedBunVersion) {
 }
 
 if (process.versions.bun !== expectedBunVersion) {
-  throw new Error(`This script requires bun@${expectedBunVersion}, but you are using bun@${process.versions.bun}`)
+  console.warn(`Warning: This script requires bun@${expectedBunVersion}, but you are using bun@${process.versions.bun}`)
 }
 
 const env = {

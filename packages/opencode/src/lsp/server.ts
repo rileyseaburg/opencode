@@ -871,12 +871,57 @@ export namespace LSPServer {
     },
     extensions: [".rs"],
     async spawn(root) {
+      const searchPath = process.env["PATH"] ? process.env["PATH"] + path.delimiter + Global.Path.bin : Global.Path.bin
+      log.info("searching for rust-analyzer in PATH", { searchPath })
       let bin = Bun.which("rust-analyzer", {
-        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
+        PATH: searchPath,
       })
 
+      if (bin) {
+        log.info("found rust-analyzer", { bin })
+        const result = await $`${bin} --version 2>&1`.nothrow().text()
+        if (!result.startsWith("rust-analyzer")) {
+          log.info("rust-analyzer binary is not functional, falling back to download", { bin, output: result })
+          bin = null
+        }
+      }
+
       if (!bin) {
-        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("rust-analyzer not found or not functional in PATH, checking if download is disabled")
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) {
+          log.info("LSP download is disabled, rust-analyzer will not be auto-enabled")
+          return
+        }
+
+        const rustupHome = process.env["RUSTUP_HOME"] ?? path.join(os.homedir(), ".rustup")
+        const toolchainsPath = path.join(rustupHome, "toolchains")
+        try {
+          const entries = await fs.readdir(toolchainsPath, { withFileTypes: true })
+          for (const entry of entries) {
+            if (!entry.isDirectory()) continue
+            const candidate = path.join(toolchainsPath, entry.name, "bin", "rust-analyzer")
+            if (await Bun.file(candidate).exists()) {
+              const result = await $`${candidate} --version 2>&1`.nothrow().text()
+              if (result.startsWith("rust-analyzer")) {
+                bin = candidate
+                log.info("found working rust-analyzer in rustup toolchain", { bin, toolchain: entry.name })
+                break
+              }
+            }
+          }
+        } catch {
+          // Rustup not installed or no toolchains
+        }
+
+        if (bin) {
+          log.info("spawning rust-analyzer LSP server", { bin, root })
+          return {
+            process: spawn(bin, {
+              cwd: root,
+            }),
+          }
+        }
+
         log.info("downloading rust-analyzer from GitHub releases")
 
         const releaseResponse = await fetch("https://api.github.com/repos/rust-lang/rust-analyzer/releases/latest")
@@ -915,7 +960,7 @@ export namespace LSPServer {
         const assets = release.assets ?? []
         const asset = assets.find((a) => a.name === assetName)
         if (!asset?.browser_download_url) {
-          log.error(`Could not find asset ${assetName} in rust-analyzer release`)
+          log.error(`Could not find asset ${assetName} in rust-analyzer release, cannot enable rust-analyzer LSP`)
           return
         }
 
@@ -946,6 +991,7 @@ export namespace LSPServer {
         log.info("installed rust-analyzer", { bin })
       }
 
+      log.info("spawning rust-analyzer LSP server", { bin, root })
       return {
         process: spawn(bin, {
           cwd: root,

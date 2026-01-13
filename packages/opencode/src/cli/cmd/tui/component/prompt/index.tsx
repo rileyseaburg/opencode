@@ -167,10 +167,11 @@ export function Prompt(props: PromptProps) {
 
   const [store, setStore] = createStore<{
     prompt: PromptInfo
-    mode: "normal" | "shell"
+    mode: "normal" | "shell" | "voice"
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
+    voiceState: "idle" | "recording" | "transcribing"
   }>({
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     prompt: {
@@ -180,6 +181,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    voiceState: "idle",
   })
 
   command.register(() => {
@@ -710,9 +712,50 @@ export function Prompt(props: PromptProps) {
     return
   }
 
+  async function startVoiceRecording() {
+    if (store.voiceState !== "idle") return
+    setStore("voiceState", "recording")
+    sdk.event.emit(TuiEvent.VoiceRecord.type, {
+      type: TuiEvent.VoiceRecord.type,
+      properties: { action: "start" },
+    } as const)
+  }
+
+  async function stopVoiceRecording() {
+    if (store.voiceState !== "recording") return
+    setStore("voiceState", "transcribing")
+    sdk.event.emit(TuiEvent.VoiceRecord.type, {
+      type: TuiEvent.VoiceRecord.type,
+      properties: { action: "stop" },
+    } as const)
+  }
+
+  sdk.event.on(TuiEvent.VoiceTranscript.type, (evt) => {
+    const text = evt.properties.text
+    if (text) {
+      input.insertText(text)
+      setTimeout(() => {
+        input.getLayoutNode().markDirty()
+        input.gotoBufferEnd()
+        renderer.requestRender()
+      }, 0)
+    }
+    setStore("voiceState", "idle")
+  })
+
+  sdk.event.on(TuiEvent.VoiceError.type, (evt) => {
+    toast.show({
+      message: evt.properties.message,
+      variant: "error",
+      duration: 3000,
+    })
+    setStore("voiceState", "idle")
+  })
+
   const highlight = createMemo(() => {
     if (keybind.leader) return theme.border
     if (store.mode === "shell") return theme.primary
+    if (store.mode === "voice") return theme.success
     return local.agent.color(local.agent.current().name)
   })
 
@@ -841,6 +884,41 @@ export function Prompt(props: PromptProps) {
                     return
                   }
                 }
+                if (store.mode === "voice") {
+                  if (e.name === "escape") {
+                    if (store.voiceState === "recording") {
+                      stopVoiceRecording()
+                    }
+                    setStore("mode", "normal")
+                    setStore("voiceState", "idle")
+                    e.preventDefault()
+                    return
+                  }
+                  if (keybind.match("voice_record", e)) {
+                    if (store.voiceState === "idle") {
+                      startVoiceRecording()
+                    } else if (store.voiceState === "recording") {
+                      stopVoiceRecording()
+                    }
+                    e.preventDefault()
+                    return
+                  }
+                }
+                if (store.mode === "normal" && keybind.match("voice_toggle", e) && !store.prompt.input) {
+                  const voiceEnabled = sync.data.config.voice?.enabled ?? false
+                  if (voiceEnabled) {
+                    setStore("mode", "voice")
+                    e.preventDefault()
+                    return
+                  }
+                  toast.show({
+                    message: "Voice mode not enabled. Add 'voice.enabled = true' to config.",
+                    variant: "warning",
+                    duration: 3000,
+                  })
+                  e.preventDefault()
+                  return
+                }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
                 if (!autocomplete.visible) {
                   if (
@@ -948,8 +1026,21 @@ export function Prompt(props: PromptProps) {
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
               <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                {store.mode === "shell"
+                  ? "Shell"
+                  : store.mode === "voice"
+                    ? "Voice"
+                    : Locale.titlecase(local.agent.current().name)}{" "}
               </text>
+              <Show when={store.mode === "voice"}>
+                <text fg={store.voiceState === "recording" ? theme.error : theme.textMuted}>
+                  {store.voiceState === "recording"
+                    ? "Recording..."
+                    : store.voiceState === "transcribing"
+                      ? "Transcribing..."
+                      : "Press space to talk"}
+                </text>
+              </Show>
               <Show when={store.mode === "normal"}>
                 <box flexDirection="row" gap={1}>
                   <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
@@ -1078,6 +1169,14 @@ export function Prompt(props: PromptProps) {
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>
                     esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
+                  </text>
+                </Match>
+                <Match when={store.mode === "voice"}>
+                  <text fg={theme.text}>
+                    {keybind.print("voice_record")} <span style={{ fg: theme.textMuted }}>push to talk</span>
+                  </text>
+                  <text fg={theme.text}>
+                    esc <span style={{ fg: theme.textMuted }}>exit voice mode</span>
                   </text>
                 </Match>
               </Switch>

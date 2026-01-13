@@ -1,5 +1,4 @@
 import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
 import z from "zod"
 
 export const TuiEvent = {
@@ -35,6 +34,24 @@ export const TuiEvent = {
       message: z.string(),
       variant: z.enum(["info", "success", "warning", "error"]),
       duration: z.number().default(5000).optional().describe("Duration in milliseconds"),
+    }),
+  ),
+  VoiceRecord: BusEvent.define(
+    "tui.voice.record",
+    z.object({
+      action: z.enum(["start", "stop"]),
+    }),
+  ),
+  VoiceTranscript: BusEvent.define(
+    "tui.voice.transcript",
+    z.object({
+      text: z.string(),
+    }),
+  ),
+  VoiceError: BusEvent.define(
+    "tui.voice.error",
+    z.object({
+      message: z.string(),
     }),
   ),
 }

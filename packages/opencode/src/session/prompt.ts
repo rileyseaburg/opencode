@@ -532,9 +532,13 @@ export namespace SessionPrompt {
         agent,
         abort,
         sessionID,
-        system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom())],
+        system: [
+          ...(await SystemPrompt.environment()),
+          ...(await SystemPrompt.custom()),
+          ...(await SystemPrompt.harness()),
+        ],
         messages: [
-          ...MessageV2.toModelMessage(sessionMessages),
+          ...MessageV2.toModelMessage(sessionMessages, { providerID: model.providerID, modelID: model.id }),
           ...(isLastStep
             ? [
                 {
@@ -1416,24 +1420,27 @@ export namespace SessionPrompt {
           role: "user",
           content: "Generate a title for this conversation:\n",
         },
-        ...MessageV2.toModelMessage([
-          {
-            info: {
-              id: Identifier.ascending("message"),
-              role: "user",
-              sessionID: input.session.id,
-              time: {
-                created: Date.now(),
+        ...MessageV2.toModelMessage(
+          [
+            {
+              info: {
+                id: Identifier.ascending("message"),
+                role: "user",
+                sessionID: input.session.id,
+                time: {
+                  created: Date.now(),
+                },
+                agent: input.message.info.role === "user" ? input.message.info.agent : await Agent.defaultAgent(),
+                model: {
+                  providerID: input.providerID,
+                  modelID: input.modelID,
+                },
               },
-              agent: input.message.info.role === "user" ? input.message.info.agent : await Agent.defaultAgent(),
-              model: {
-                providerID: input.providerID,
-                modelID: input.modelID,
-              },
+              parts: input.message.parts,
             },
-            parts: input.message.parts,
-          },
-        ]),
+          ],
+          { providerID: input.providerID, modelID: input.modelID },
+        ),
       ],
     })
     const text = await result.text.catch((err) => log.error("failed to generate title", { error: err }))

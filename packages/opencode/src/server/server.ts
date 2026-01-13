@@ -48,6 +48,7 @@ import { upgradeWebSocket, websocket } from "hono/bun"
 import { errors } from "./error"
 import { Pty } from "@/pty"
 import { Installation } from "@/installation"
+import { Voice } from "../voice"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1526,6 +1527,162 @@ export namespace Server {
             response: c.req.valid("json").response,
           })
           return c.json(true)
+        },
+      )
+      .post(
+        "/session/:sessionID/voice/start",
+        describeRoute({
+          summary: "Start voice recording",
+          description: "Start recording audio for voice input in the specified session.",
+          operationId: "session.voice.start",
+          responses: {
+            200: {
+              description: "Recording started",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z
+                      .object({
+                        recording: z.boolean(),
+                        timestamp: z.number(),
+                      })
+                      .meta({ ref: "VoiceStartResult" }),
+                  ),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            sessionID: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        async (c) => {
+          c.req.valid("param")
+          await Voice.startRecording()
+          Bus.publish(Voice.RecordingStarted, { timestamp: Date.now() })
+          return c.json({
+            recording: true,
+            timestamp: Date.now(),
+          })
+        },
+      )
+      .post(
+        "/session/:sessionID/voice/stop",
+        describeRoute({
+          summary: "Stop voice recording",
+          description: "Stop recording audio and return the transcript for the specified session.",
+          operationId: "session.voice.stop",
+          responses: {
+            200: {
+              description: "Recording stopped and transcript returned",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z
+                      .object({
+                        text: z.string(),
+                        duration: z.number(),
+                      })
+                      .meta({ ref: "VoiceStopResult" }),
+                  ),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            sessionID: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        async (c) => {
+          c.req.valid("param")
+          const text = await Voice.recordAndTranscribe()
+          return c.json({
+            text,
+            duration: 0,
+          })
+        },
+      )
+      .post(
+        "/session/:sessionID/voice/speak",
+        describeRoute({
+          summary: "Speak text",
+          description: "Convert text to speech and play it for the specified session.",
+          operationId: "session.voice.speak",
+          responses: {
+            200: {
+              description: "Speech synthesis completed",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            sessionID: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        validator(
+          "json",
+          z.object({
+            text: z.string().meta({ description: "Text to speak" }),
+          }),
+        ),
+        async (c) => {
+          c.req.valid("param")
+          const body = c.req.valid("json")
+          await Voice.speak(body.text)
+          return c.json(true)
+        },
+      )
+      .get(
+        "/session/:sessionID/voice/status",
+        describeRoute({
+          summary: "Get voice status",
+          description: "Get the current voice recording and synthesis status for the specified session.",
+          operationId: "session.voice.status",
+          responses: {
+            200: {
+              description: "Voice status",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z
+                      .object({
+                        recording: z.boolean(),
+                      })
+                      .meta({ ref: "VoiceStatusResult" }),
+                  ),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            sessionID: z.string().meta({ description: "Session ID" }),
+          }),
+        ),
+        async (c) => {
+          c.req.valid("param")
+          const recording = Voice.isRecording()
+          return c.json({
+            recording,
+          })
         },
       )
       .get(

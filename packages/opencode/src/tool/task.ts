@@ -10,6 +10,54 @@ import { SessionPrompt } from "../session/prompt"
 import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
+import { Provider } from "../provider/provider"
+
+// Model selector: maps user-friendly names to full provider/model-id
+const MODEL_SELECTOR: Record<string, string> = {
+  // Anthropic
+  "claude-sonnet": "anthropic/claude-sonnet-4-20250514",
+  "claude-sonnet-4": "anthropic/claude-sonnet-4-20250514",
+  sonnet: "anthropic/claude-sonnet-4-20250514",
+  "claude-opus": "anthropic/claude-opus-4-20250514",
+  opus: "anthropic/claude-opus-4-20250514",
+  "claude-haiku": "anthropic/claude-haiku",
+  haiku: "anthropic/claude-haiku",
+  // Azure Anthropic
+  "azure-opus": "azure-anthropic/claude-opus-4-5",
+  "azure-anthropic": "azure-anthropic/claude-opus-4-5",
+  // Minimax (custom provider via Anthropic SDK)
+  minimax: "minimax-m2/MiniMax-M2.1",
+  "minimax-m2": "minimax-m2/MiniMax-M2.1",
+  "minimax-m2.1": "minimax-m2/MiniMax-M2.1",
+  "m2.1": "minimax-m2/MiniMax-M2.1",
+  "m2": "minimax-m2/MiniMax-M2",
+  // OpenAI
+  "gpt-4": "openai/gpt-4",
+  "gpt-4o": "openai/gpt-4o",
+  "gpt-4-turbo": "openai/gpt-4-turbo",
+  "gpt-4.1": "openai/gpt-4.1",
+  o1: "openai/o1",
+  "o1-mini": "openai/o1-mini",
+  o3: "openai/o3",
+  "o3-mini": "openai/o3-mini",
+  // Google
+  gemini: "google/gemini-2.5-pro",
+  "gemini-pro": "google/gemini-2.5-pro",
+  "gemini-2.5-pro": "google/gemini-2.5-pro",
+  "gemini-flash": "google/gemini-2.5-flash",
+  "gemini-2.5-flash": "google/gemini-2.5-flash",
+  // xAI
+  grok: "xai/grok-3",
+  "grok-3": "xai/grok-3",
+}
+
+function resolveModel(input: string): string {
+  const key = input.toLowerCase().trim()
+  // If already in provider/model format, return as-is
+  if (input.includes("/")) return input
+  // Look up in selector
+  return MODEL_SELECTOR[key] ?? input
+}
 
 export const TaskTool = Tool.define("task", async () => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -27,6 +75,12 @@ export const TaskTool = Tool.define("task", async () => {
       subagent_type: z.string().describe("The type of specialized agent to use for this task"),
       session_id: z.string().describe("Existing Task session to continue").optional(),
       command: z.string().describe("The command that triggered this task").optional(),
+      model: z
+        .string()
+        .describe(
+          "Optional model to use. Use friendly names like 'minimax', 'claude-sonnet', 'gemini', 'gpt-4o', 'grok' - or full format like 'anthropic/claude-sonnet-4-20250514'",
+        )
+        .optional(),
     }),
     async execute(params, ctx) {
       const agent = await Agent.get(params.subagent_type)
@@ -76,10 +130,12 @@ export const TaskTool = Tool.define("task", async () => {
         })
       })
 
-      const model = agent.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
-      }
+      const model = params.model
+        ? Provider.parseModel(resolveModel(params.model))
+        : (agent.model ?? {
+            modelID: msg.info.modelID,
+            providerID: msg.info.providerID,
+          })
 
       function cancel() {
         SessionPrompt.cancel(session.id)

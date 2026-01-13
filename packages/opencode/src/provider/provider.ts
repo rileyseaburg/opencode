@@ -64,6 +64,7 @@ export namespace Provider {
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
   type CustomLoader = (provider: Info) => Promise<{
     autoload: boolean
+    hasKey?: boolean
     getModel?: CustomModelLoader
     options?: Record<string, any>
   }>
@@ -76,6 +77,32 @@ export namespace Provider {
           headers: {
             "anthropic-beta":
               "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+          },
+        },
+      }
+    },
+    "glm": async () => {
+      const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
+      const autoload = Boolean(project)
+      if (!autoload) return { autoload: false }
+
+      return {
+        autoload: true,
+        options: {
+          baseURL: `https://aiplatform.googleapis.com/v1/projects/${project}/locations/global/endpoints/openapi`,
+          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+            const { exec } = await import("child_process")
+            const { promisify } = await import("util")
+            const execAsync = promisify(exec)
+            try {
+              const { stdout } = await execAsync("gcloud auth print-access-token")
+              const headers = new Headers(init?.headers)
+              headers.set("Authorization", `Bearer ${stdout.trim()}`)
+              return fetch(input, { ...init, headers })
+            } catch (e) {
+              log.error("Failed to get gcloud access token", { error: e })
+              return fetch(input, init)
+            }
           },
         },
       }
@@ -387,6 +414,55 @@ export namespace Provider {
         },
       }
     },
+    "zai-org": async () => {
+      const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
+      const autoload = Boolean(project)
+      if (!autoload) return { autoload: false }
+
+      return {
+        autoload: true,
+        options: {
+          baseURL: `https://aiplatform.googleapis.com/v1/projects/${project}/locations/global/endpoints/openapi`,
+          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+            const { exec } = await import("child_process")
+            const { promisify } = await import("util")
+            const execAsync = promisify(exec)
+            try {
+              const { stdout } = await execAsync("gcloud auth print-access-token")
+              const headers = new Headers(init?.headers)
+              headers.set("Authorization", `Bearer ${stdout.trim()}`)
+              return fetch(input, { ...init, headers })
+            } catch (e) {
+              log.error("Failed to get gcloud access token", { error: e })
+              return fetch(input, init)
+            }
+          },
+        },
+      }
+    },
+    "glm-vertex": async () => {
+      return {
+        autoload: true,
+        hasKey: true, // Indicate that authentication is handled (via gcloud)
+        options: {
+          baseURL: "https://aiplatform.googleapis.com/v1/projects/spotlessbinco/locations/global/endpoints/openapi",
+          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+            const { exec } = await import("child_process")
+            const { promisify } = await import("util")
+            const execAsync = promisify(exec)
+            try {
+              const { stdout } = await execAsync("gcloud auth print-access-token")
+              const headers = new Headers(init?.headers)
+              headers.set("Authorization", `Bearer ${stdout.trim()}`)
+              return fetch(input, { ...init, headers })
+            } catch (e) {
+              log.error("Failed to get gcloud access token", { error: e })
+              return fetch(input, init)
+            }
+          },
+        },
+      }
+    },
   }
 
   export const Model = z
@@ -465,6 +541,7 @@ export namespace Provider {
       source: z.enum(["env", "config", "custom", "api"]),
       env: z.string().array(),
       key: z.string().optional(),
+      hasKey: z.boolean().optional(),
       options: z.record(z.string(), z.any()),
       models: z.record(z.string(), Model),
     })
@@ -496,13 +573,13 @@ export namespace Provider {
         },
         experimentalOver200K: model.cost?.context_over_200k
           ? {
-              cache: {
-                read: model.cost.context_over_200k.cache_read ?? 0,
-                write: model.cost.context_over_200k.cache_write ?? 0,
-              },
-              input: model.cost.context_over_200k.input,
-              output: model.cost.context_over_200k.output,
-            }
+            cache: {
+              read: model.cost.context_over_200k.cache_read ?? 0,
+              write: model.cost.context_over_200k.cache_write ?? 0,
+            },
+            input: model.cost.context_over_200k.input,
+            output: model.cost.context_over_200k.output,
+          }
           : undefined,
       },
       limit: {
@@ -588,14 +665,32 @@ export namespace Provider {
     function mergeProvider(providerID: string, provider: Partial<Info>) {
       const existing = providers[providerID]
       if (existing) {
+        // Preserve fetch function from existing provider before merging
+        const existingFetch = existing.options?.fetch
         // @ts-expect-error
         providers[providerID] = mergeDeep(existing, provider)
+        // Always restore fetch function if it existed and wasn't explicitly replaced
+        if (existingFetch && typeof existingFetch === 'function') {
+          if (!provider.options?.fetch || typeof provider.options.fetch !== 'function') {
+            providers[providerID].options = providers[providerID].options || {}
+            providers[providerID].options.fetch = existingFetch
+          }
+        }
         return
       }
       const match = database[providerID]
       if (!match) return
+      // Check if database has a fetch function to preserve
+      const databaseFetch = match.options?.fetch
       // @ts-expect-error
       providers[providerID] = mergeDeep(match, provider)
+      // Always restore fetch function if it existed and wasn't explicitly replaced
+      if (databaseFetch && typeof databaseFetch === 'function') {
+        if (!provider.options?.fetch || typeof provider.options.fetch !== 'function') {
+          providers[providerID].options = providers[providerID].options || {}
+          providers[providerID].options.fetch = databaseFetch
+        }
+      }
     }
 
     // extend database from config
@@ -746,10 +841,12 @@ export namespace Provider {
       const result = await fn(database[providerID])
       if (result && (result.autoload || providers[providerID])) {
         if (result.getModel) modelLoaders[providerID] = result.getModel
-        mergeProvider(providerID, {
+        const partial: Partial<Info> = {
           source: "custom",
           options: result.options,
-        })
+        }
+        if (result.hasKey !== undefined) partial.hasKey = result.hasKey
+        mergeProvider(providerID, partial)
       }
     }
 
@@ -974,6 +1071,7 @@ export namespace Provider {
     const provider = await state().then((state) => state.providers[providerID])
     if (provider) {
       let priority = [
+        "gemini-3-flash",
         "claude-haiku-4-5",
         "claude-haiku-4.5",
         "3-5-haiku",
@@ -1004,7 +1102,7 @@ export namespace Provider {
     return undefined
   }
 
-  const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "gemini-3-pro"]
+  const priority = ["gpt-5", "claude-sonnet-4", "big-pickle", "glm-4.7", "gemini-3-flash", "gemini-3-pro"]
   export function sort(models: Model[]) {
     return sortBy(
       models,
