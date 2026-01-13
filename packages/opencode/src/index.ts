@@ -21,13 +21,12 @@ import { ExportCommand } from "./cli/cmd/export"
 import { ImportCommand } from "./cli/cmd/import"
 import { AttachCommand } from "./cli/cmd/tui/attach"
 import { TuiThreadCommand } from "./cli/cmd/tui/thread"
-import { TuiSpawnCommand } from "./cli/cmd/tui/spawn"
 import { AcpCommand } from "./cli/cmd/acp"
-import { A2ACommand } from "./cli/cmd/a2a"
 import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
+import { A2ACommand } from "./cli/cmd/a2a"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -78,10 +77,10 @@ const cli = yargs(hideBin(process.argv))
     })
   })
   .usage("\n" + UI.logo())
+  .completion("completion", "generate shell completion script")
   .command(AcpCommand)
   .command(McpCommand)
   .command(TuiThreadCommand)
-  .command(TuiSpawnCommand)
   .command(AttachCommand)
   .command(RunCommand)
   .command(GenerateCommand)
@@ -100,14 +99,16 @@ const cli = yargs(hideBin(process.argv))
   .command(PrCommand)
   .command(SessionCommand)
   .command(A2ACommand)
-  .fail((msg) => {
+  .fail((msg, err) => {
     if (
-      msg.startsWith("Unknown argument") ||
-      msg.startsWith("Not enough non-option arguments") ||
-      msg.startsWith("Invalid values:")
+      msg?.startsWith("Unknown argument") ||
+      msg?.startsWith("Not enough non-option arguments") ||
+      msg?.startsWith("Invalid values:")
     ) {
+      if (err) throw err
       cli.showHelp("log")
     }
+    if (err) throw err
     process.exit(1)
   })
   .strict()
@@ -148,7 +149,7 @@ try {
   if (formatted) UI.error(formatted)
   if (formatted === undefined) {
     UI.error("Unexpected error, check log file at " + Log.file() + " for more details" + EOL)
-    console.error(e)
+    console.error(e instanceof Error ? e.message : String(e))
   }
   process.exitCode = 1
 } finally {

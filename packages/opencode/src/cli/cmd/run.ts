@@ -377,6 +377,10 @@ export const RunCommand = cmd({
         describe: "enable voice mode: record audio, transcribe, send to LLM, optionally speak response",
         default: false,
       })
+      .option("variant", {
+        type: "string",
+        describe: "model variant (provider-specific reasoning effort, e.g., high, max, minimal)",
+      })
   },
   handler: async (args) => {
     let message = [...args.message, ...(args["--"] || [])]

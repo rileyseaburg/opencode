@@ -24,6 +24,7 @@ import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
+import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
@@ -34,6 +35,7 @@ import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
+import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
@@ -96,7 +98,16 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   })
 }
 
-export function tui(input: { url: string; args: Args; onExit?: () => Promise<void> }) {
+import type { EventSource } from "./context/sdk"
+
+export function tui(input: {
+  url: string
+  args: Args
+  directory?: string
+  fetch?: typeof fetch
+  events?: EventSource
+  onExit?: () => Promise<void>
+}) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
     const mode = await getTerminalBackgroundColor()
@@ -116,7 +127,12 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
                 <KVProvider>
                   <ToastProvider>
                     <RouteProvider>
-                      <SDKProvider url={input.url}>
+                      <SDKProvider
+                        url={input.url}
+                        directory={input.directory}
+                        fetch={input.fetch}
+                        events={input.events}
+                      >
                         <SyncProvider>
                           <ThemeProvider mode={mode}>
                             <LocalProvider>
@@ -124,11 +140,13 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
                                 <PromptStashProvider>
                                   <DialogProvider>
                                     <CommandProvider>
-                                      <PromptHistoryProvider>
-                                        <PromptRefProvider>
-                                          <App />
-                                        </PromptRefProvider>
-                                      </PromptHistoryProvider>
+                                      <FrecencyProvider>
+                                        <PromptHistoryProvider>
+                                          <PromptRefProvider>
+                                            <App />
+                                          </PromptRefProvider>
+                                        </PromptHistoryProvider>
+                                      </FrecencyProvider>
                                     </CommandProvider>
                                   </DialogProvider>
                                 </PromptStashProvider>
@@ -388,6 +406,15 @@ function App() {
       },
     },
     {
+      title: "Variant cycle",
+      value: "variant.cycle",
+      keybind: "variant_cycle",
+      category: "Agent",
+      onSelect: () => {
+        local.model.variant.cycle()
+      },
+    },
+    {
       title: "Agent cycle reverse",
       value: "agent.cycle.reverse",
       keybind: "agent_cycle_reverse",
@@ -418,6 +445,7 @@ function App() {
     {
       title: "Switch theme",
       value: "theme.switch",
+      keybind: "theme_list",
       onSelect: () => {
         dialog.replace(() => <DialogThemeList />)
       },
@@ -479,6 +507,20 @@ function App() {
       value: "app.console",
       onSelect: (dialog) => {
         renderer.console.toggle()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Write heap snapshot",
+      category: "System",
+      value: "app.heap_snapshot",
+      onSelect: (dialog) => {
+        const path = writeHeapSnapshot()
+        toast.show({
+          variant: "info",
+          message: `Heap snapshot written to ${path}`,
+          duration: 5000,
+        })
         dialog.clear()
       },
     },
@@ -654,6 +696,13 @@ function App() {
     })
   })
 
+  sdk.event.on(TuiEvent.SessionSelect.type, (evt) => {
+    route.navigate({
+      type: "session",
+      sessionID: evt.properties.sessionID,
+    })
+  })
+
   sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
       route.navigate({ type: "home" })
@@ -666,8 +715,9 @@ function App() {
 
   sdk.event.on(SessionApi.Event.Error.type, (evt) => {
     const error = evt.properties.error
+    if (error && typeof error === "object" && error.name === "MessageAbortedError") return
     const message = (() => {
-      if (!error) return "An error occured"
+      if (!error) return "An error occurred"
 
       if (typeof error === "object") {
         const data = error.data
@@ -681,15 +731,6 @@ function App() {
     toast.show({
       variant: "error",
       message,
-      duration: 5000,
-    })
-  })
-
-  sdk.event.on(Installation.Event.Updated.type, (evt) => {
-    toast.show({
-      variant: "success",
-      title: "Update Complete",
-      message: `OpenCode updated to v${evt.properties.version}`,
       duration: 5000,
     })
   })
@@ -746,14 +787,22 @@ function ErrorComponent(props: {
   mode?: "dark" | "light"
 }) {
   const term = useTerminalDimensions()
+  const renderer = useRenderer()
+
+  const handleExit = async () => {
+    renderer.setTerminalTitle("")
+    renderer.destroy()
+    props.onExit()
+  }
+
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c") {
-      props.onExit()
+      handleExit()
     }
   })
   const [copied, setCopied] = createSignal(false)
 
-  const issueURL = new URL("https://github.com/sst/opencode/issues/new?template=bug-report.yml")
+  const issueURL = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
 
   // Choose safe fallback colors per mode since theme context may not be available
   const isLight = props.mode === "light"
@@ -801,7 +850,7 @@ function ErrorComponent(props: {
         <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
           <text fg={colors.bg}>Reset TUI</text>
         </box>
-        <box onMouseUp={props.onExit} backgroundColor={colors.primary} padding={1}>
+        <box onMouseUp={handleExit} backgroundColor={colors.primary} padding={1}>
           <text fg={colors.bg}>Exit</text>
         </box>
       </box>
