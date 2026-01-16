@@ -23,6 +23,7 @@ import type { FilePart } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
+import { formatDuration } from "@/util/format"
 import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
@@ -565,25 +566,27 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
-      sdk.client.session.prompt({
-        sessionID,
-        ...selectedModel,
-        messageID,
-        agent: local.agent.current().name,
-        model: selectedModel,
-        variant,
-        parts: [
-          {
-            id: Identifier.ascending("part"),
-            type: "text",
-            text: inputText,
-          },
-          ...nonTextParts.map((x) => ({
-            id: Identifier.ascending("part"),
-            ...x,
-          })),
-        ],
-      })
+      sdk.client.session
+        .prompt({
+          sessionID,
+          ...selectedModel,
+          messageID,
+          agent: local.agent.current().name,
+          model: selectedModel,
+          variant,
+          parts: [
+            {
+              id: Identifier.ascending("part"),
+              type: "text",
+              text: inputText,
+            },
+            ...nonTextParts.map((x) => ({
+              id: Identifier.ascending("part"),
+              ...x,
+            })),
+          ],
+        })
+        .catch(() => {})
     }
     history.append({
       ...store.prompt,
@@ -1126,7 +1129,8 @@ export function Prompt(props: PromptProps) {
                       if (!r) return ""
                       const baseMessage = message()
                       const truncatedHint = isTruncated() ? " (click to expand)" : ""
-                      const retryInfo = ` [retrying ${seconds() > 0 ? `in ${seconds()}s ` : ""}attempt #${r.attempt}]`
+                      const duration = formatDuration(seconds())
+                      const retryInfo = ` [retrying ${duration ? `in ${duration} ` : ""}attempt #${r.attempt}]`
                       return baseMessage + truncatedHint + retryInfo
                     }
 
