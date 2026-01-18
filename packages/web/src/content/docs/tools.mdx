@@ -191,6 +191,27 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 
 ---
 
+### rlm
+
+Process arbitrarily long contexts using recursive LLM calls in a Python REPL.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "rlm": "allow"
+  }
+}
+```
+
+RLM allows the LLM to analyze large codebases by writing Python code that manipulates context. It can make recursive sub-LLM calls without context bloat, enabling analysis of projects that exceed normal context window limits.
+
+The tool spawns a Python REPL with your context pre-loaded. The LLM writes Python code, uses `llm_query()` to make recursive calls, and returns final output with `FINAL()` or `FINAL_VAR()`.
+
+[Learn more](/docs/rlm) about RLM usage and best practices.
+
+---
+
 ### patch
 
 Apply patches to files.

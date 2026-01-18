@@ -1,0 +1,136 @@
+---
+title: RLM
+description: Process arbitrarily long contexts using recursive LLM calls.
+---
+
+RLM (Recursive Language Models) allows LLMs to process arbitrarily long contexts by treating prompts as external variables in a Python REPL. This tool bridges the gap between large codebases and limited context windows.
+
+---
+
+## How it works
+
+The LLM writes Python code that manipulates a `context` variable. Your code can query the LLM recursively using `llm_query()`. Each subcall gets its own fresh response without context bloat.
+
+---
+
+## Usage
+
+Use the `rlm` tool in your conversation:
+
+```
+Analyze this large codebase using RLM. Focus on finding security issues.
+```
+
+When RLM is enabled, the LLM will:
+
+1. Access your context through a Python variable
+2. Programatically analyze it using Python code
+3. Make recursive sub-LLM calls when needed
+4. Return final insights
+
+---
+
+## Context loading
+
+You can provide context in multiple ways:
+
+- **String**: Pass inline text directly
+- **Paths**: Load specific files by path
+- **Glob**: Load all files matching a pattern
+
+The context is always available as a Python variable in REPL.
+
+---
+
+## Python API
+
+In the RLM REPL, you have access to:
+
+```python
+# Context is pre-loaded
+print(f"Context length: {len(context)}")
+
+# Query the LLM recursively
+answer = llm_query("Summarize the main issues")
+print(answer)
+
+# Use Python for complex analysis
+import re
+matches = re.findall(r"TODO.*", context)
+print(f"Found {len(matches)} TODOs")
+```
+
+---
+
+## Return values
+
+End your RLM session with final output using one of:
+
+```python
+# Direct string output
+FINAL("Here is my final answer")
+
+# Or return a variable
+result = "Analysis complete"
+FINAL_VAR(result)
+```
+
+---
+
+## Guardrails
+
+RLM includes safety limits:
+
+- Max 5 subcalls per iteration
+- Max 100 total subcalls per session
+- Max 8000 tokens per subcall
+- Max 20 iterations
+
+These prevent runaway resource usage while providing flexibility.
+
+---
+
+## Configuration
+
+Set environment variables to control behavior:
+
+```bash
+# RLM is enabled automatically when available
+python --version  # Requires Python 3+
+
+# Adjust limits per session
+export A2A_RLM_MAX_SUBCALLS_PER_ITERATION=5
+export A2A_RLM_MAX_TOTAL_SUBCALLS=100
+export A2A_RLM_MAX_SUBCALL_TOKENS=8000
+export A2A_RLM_MAX_ITERATIONS=20
+```
+
+---
+
+## Best practices
+
+### Focus your queries
+
+Be specific in your recursive calls. Instead of `"Analyze everything"`, use `"List all API endpoints"` or `"Find security vulnerabilities"`.
+
+### Work in batches
+
+Process context in logical groups rather than all at once. Python makes this natural with lists and comprehensions.
+
+### Use Python's strengths
+
+Leverage regex, dict comprehensions, and Python's standard library. The REPL gives you full Python power.
+
+### Check progress
+
+Occasionally return intermediate results using `print()` statements. This helps you track analysis progress.
+
+---
+
+## Example use cases
+
+- **Large codebase review**: Analyze monorepos without context limits
+- **Multi-file refactoring**: Coordinate changes across many files
+- **Architecture analysis**: Understand complex system dependencies
+- **Security audits**: Systematically check for vulnerabilities at scale
+- **Documentation generation**: Extract and synthesize information from many files

@@ -86,7 +86,7 @@ export namespace Provider {
         },
       }
     },
-    "glm": async () => {
+    glm: async () => {
       const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
@@ -556,7 +556,8 @@ export namespace Provider {
         autoload: true,
         hasKey: true, // Indicate that authentication is handled (via gcloud)
         options: {
-          baseURL: "https://aiplatform.googleapis.com/v1/projects/spotlessbinco/locations/global/endpoints/openapi",
+          baseURL:
+            "https://us-south1-aiplatform.googleapis.com/v1/projects/spotlessbinco/locations/us-south1/endpoints/openapi",
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
             const { exec } = await import("child_process")
             const { promisify } = await import("util")
@@ -686,13 +687,13 @@ export namespace Provider {
         },
         experimentalOver200K: model.cost?.context_over_200k
           ? {
-            cache: {
-              read: model.cost.context_over_200k.cache_read ?? 0,
-              write: model.cost.context_over_200k.cache_write ?? 0,
-            },
-            input: model.cost.context_over_200k.input,
-            output: model.cost.context_over_200k.output,
-          }
+              cache: {
+                read: model.cost.context_over_200k.cache_read ?? 0,
+                write: model.cost.context_over_200k.cache_write ?? 0,
+              },
+              input: model.cost.context_over_200k.input,
+              output: model.cost.context_over_200k.output,
+            }
           : undefined,
       },
       limit: {
@@ -781,6 +782,73 @@ export namespace Provider {
       }
     }
 
+    // Add glm-vertex provider with custom models for Vertex AI MaaS
+    const glmVertexUrl =
+      "https://us-south1-aiplatform.googleapis.com/v1/projects/spotlessbinco/locations/us-south1/endpoints/openapi"
+    database["glm-vertex"] = {
+      id: "glm-vertex",
+      name: "Vertex AI MaaS",
+      source: "custom",
+      env: [],
+      options: {},
+      models: {
+        "moonshotai/kimi-k2-thinking-maas": {
+          id: "moonshotai/kimi-k2-thinking-maas",
+          providerID: "glm-vertex",
+          name: "Kimi K2 Thinking MAAS",
+          family: "kimi-k2",
+          api: {
+            id: "moonshotai/kimi-k2-thinking-maas",
+            url: glmVertexUrl,
+            npm: "@ai-sdk/openai-compatible",
+          },
+          status: "active",
+          headers: {},
+          options: {},
+          cost: { input: 0.6, output: 2.5, cache: { read: 0, write: 0 } },
+          limit: { context: 262144, output: 8192 },
+          capabilities: {
+            temperature: true,
+            reasoning: true,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: { field: "reasoning_content" },
+          },
+          release_date: "2025-12-22",
+          variants: {},
+        },
+        "zai-org/glm-4.7-maas": {
+          id: "zai-org/glm-4.7-maas",
+          providerID: "glm-vertex",
+          name: "GLM 4.7 MAAS",
+          family: "glm-4.7",
+          api: {
+            id: "zai-org/glm-4.7-maas",
+            url: "https://aiplatform.googleapis.com/v1/projects/spotlessbinco/locations/global/endpoints/openapi",
+            npm: "@ai-sdk/openai-compatible",
+          },
+          status: "active",
+          headers: {},
+          options: {},
+          cost: { input: 0.6, output: 2.2, cache: { read: 0, write: 0 } },
+          limit: { context: 204800, output: 131072 },
+          capabilities: {
+            temperature: true,
+            reasoning: true,
+            attachment: false,
+            toolcall: true,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: { field: "reasoning_content" },
+          },
+          release_date: "2025-12-22",
+          variants: {},
+        },
+      },
+    }
+
     function mergeProvider(providerID: string, provider: Partial<Info>) {
       const existing = providers[providerID]
       if (existing) {
@@ -789,8 +857,8 @@ export namespace Provider {
         // @ts-expect-error
         providers[providerID] = mergeDeep(existing, provider)
         // Always restore fetch function if it existed and wasn't explicitly replaced
-        if (existingFetch && typeof existingFetch === 'function') {
-          if (!provider.options?.fetch || typeof provider.options.fetch !== 'function') {
+        if (existingFetch && typeof existingFetch === "function") {
+          if (!provider.options?.fetch || typeof provider.options.fetch !== "function") {
             providers[providerID].options = providers[providerID].options || {}
             providers[providerID].options.fetch = existingFetch
           }
@@ -804,8 +872,8 @@ export namespace Provider {
       // @ts-expect-error
       providers[providerID] = mergeDeep(match, provider)
       // Always restore fetch function if it existed and wasn't explicitly replaced
-      if (databaseFetch && typeof databaseFetch === 'function') {
-        if (!provider.options?.fetch || typeof provider.options.fetch !== 'function') {
+      if (databaseFetch && typeof databaseFetch === "function") {
+        if (!provider.options?.fetch || typeof provider.options.fetch !== "function") {
           providers[providerID].options = providers[providerID].options || {}
           providers[providerID].options.fetch = databaseFetch
         }

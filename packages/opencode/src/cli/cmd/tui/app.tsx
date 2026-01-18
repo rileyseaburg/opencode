@@ -408,7 +408,6 @@ function App() {
     {
       title: "Variant cycle",
       value: "variant.cycle",
-      keybind: "variant_cycle",
       category: "Agent",
       onSelect: () => {
         local.model.variant.cycle()
@@ -472,7 +471,7 @@ function App() {
       title: "Open docs",
       value: "docs.open",
       onSelect: () => {
-        open("https://opencode.ai/docs").catch(() => {})
+        open("https://opencode.ai/docs").catch(() => { })
         dialog.clear()
       },
       category: "System",
@@ -481,7 +480,7 @@ function App() {
       title: "Open WebUI",
       value: "webui.open",
       onSelect: () => {
-        open(sdk.url).catch(() => {})
+        open(sdk.url).catch(() => { })
         dialog.clear()
       },
       category: "System",
@@ -619,12 +618,12 @@ function App() {
       onSelect: (dialog) => {
         const voiceConfig = (sync.data.config as any).voice as
           | {
-              enabled?: boolean
-              sttProvider?: string
-              ttsProvider?: string
-              ttsVoice?: string
-              autoSpeak?: boolean
-            }
+            enabled?: boolean
+            sttProvider?: string
+            ttsProvider?: string
+            ttsVoice?: string
+            autoSpeak?: boolean
+          }
           | undefined
         const enabled = voiceEnabled() || voiceConfig?.enabled
         const sttProvider = voiceConfig?.sttProvider ?? "openai"
@@ -693,13 +692,6 @@ function App() {
       message: evt.properties.message,
       variant: evt.properties.variant,
       duration: evt.properties.duration,
-    })
-  })
-
-  sdk.event.on(TuiEvent.SessionSelect.type, (evt) => {
-    route.navigate({
-      type: "session",
-      sessionID: evt.properties.sessionID,
     })
   })
 

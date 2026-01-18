@@ -33,7 +33,7 @@ export namespace Plugin {
       project: Instance.project,
       worktree: Instance.worktree,
       directory: Instance.directory,
-      serverUrl: Server.url(),
+      serverUrl: new URL("http://localhost:4096"),
       $: Bun.$,
     }
 
@@ -97,17 +97,14 @@ export namespace Plugin {
 
   export async function trigger<
     Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
-    Input = Parameters<Required<Hooks>[Name]>[0],
-    Output = Parameters<Required<Hooks>[Name]>[1],
+    Input extends Parameters<Required<Hooks>[Name]>[0] = Parameters<Required<Hooks>[Name]>[0],
+    Output extends Parameters<Required<Hooks>[Name]>[1] = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
     if (!name) return output
     for (const hook of await state().then((x) => x.hooks)) {
       const fn = hook[name]
       if (!fn) continue
-      // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
-      // give up.
-      // try-counter: 2
-      await fn(input, output)
+      await (fn as NonNullable<typeof fn>)(input as Parameters<Required<Hooks>[Name]>[0], output)
     }
     return output
   }

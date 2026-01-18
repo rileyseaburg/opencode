@@ -26,6 +26,7 @@ import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
 import { Truncate } from "./truncation"
 import { PlanExitTool, PlanEnterTool } from "./plan"
+import { RlmTool } from "./rlm"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -109,6 +110,7 @@ export namespace ToolRegistry {
       CodeSearchTool,
       SkillTool,
       LspTool,
+      RlmTool,
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool, PlanEnterTool] : []),
       ...custom,
